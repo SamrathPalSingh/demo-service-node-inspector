@@ -1,0 +1,56 @@
+name: Test incoming infrastructure change
+
+on:
+  repository_dispatch:
+    types: [infra_contract_test]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: incoming-infra-${{ github.event.client_payload.correlation_id }}
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.x'
+          cache: false
+
+      - name: Evaluate this repository against the incoming infra PR
+        id: evaluate
+        continue-on-error: true
+        env:
+          CORRELATION_ID: ${{ github.event.client_payload.correlation_id }}
+          SERVICE_ID: ${{ github.event.client_payload.service_id }}
+          INFRA_REPOSITORY: ${{ github.event.client_payload.infra_repository }}
+          INFRA_PR_NUMBER: ${{ github.event.client_payload.infra_pr_number }}
+          INFRA_HEAD_SHA: ${{ github.event.client_payload.infra_head_sha }}
+          CHANGE_DESCRIPTION: ${{ github.event.client_payload.change_description }}
+          REGISTRY_REPOSITORY: ${{ github.event.client_payload.registry_repository }}
+          REGISTRY_REF: ${{ github.event.client_payload.registry_ref }}
+          CONTRACT_READ_TOKEN: ${{ secrets.CONTRACT_FANOUT_TOKEN }}
+          CONTRACT_ENGINE: gemini
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash' }}
+        run: go run ./cmd/infra-contract-test
+
+      - name: Return the correlated verdict to the infra workflow
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: infra-contract-${{ github.event.client_payload.correlation_id }}-${{ github.event.client_payload.service_id }}
+          path: result.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Mark this service workflow as incompatible
+        if: steps.evaluate.outcome == 'failure'
+        run: exit 1

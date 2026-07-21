@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-inspector
+  labels:
+    app.kubernetes.io/name: node-inspector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: node-inspector
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: node-inspector
+    spec:
+      containers:
+        - name: node-inspector
+          image: ghcr.io/example/node-inspector:1.0.0
+          command: ["/node-inspector"]
+          env:
+            - name: INSPECTION_MOUNT
+              value: /mnt/runtime-check
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "128Mi"
+          volumeMounts:
+            - name: runtime-check
+              mountPath: /mnt/runtime-check
+      volumes:
+        - name: runtime-check
+          emptyDir: {}

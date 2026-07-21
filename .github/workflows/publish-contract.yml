@@ -1,0 +1,30 @@
+name: Publish Node Inspector contract
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra-requirements.md"
+      - "k8s/**"
+      - "cmd/publish-contract/**"
+      - "go.mod"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.x'
+          cache: false
+      - name: Publish versioned service contract
+        env:
+          REGISTRY_REPO: ${{ vars.CONTRACT_REGISTRY_REPO || format('{0}/demo-contract-registry', github.repository_owner) }}
+          REGISTRY_BRANCH: ${{ vars.CONTRACT_REGISTRY_REF || 'main' }}
+          REGISTRY_WRITE_TOKEN: ${{ secrets.REGISTRY_WRITE_TOKEN }}
+        run: go run ./cmd/publish-contract --kind service
