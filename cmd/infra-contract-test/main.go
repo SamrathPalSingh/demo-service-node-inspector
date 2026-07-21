@@ -117,19 +117,23 @@ func run(args []string) (int, error) {
 	}
 
 	verdict := modelVerdict{Status: "pass", Risk: "none", Summary: "No declared incompatibility was detected.", Violations: []violation{}}
+	var geminiErr error
 	if cfg.Engine == "gemini" {
 		prompt, buildErr := buildPrompt(cfg, contract, diff, context)
 		if buildErr != nil {
 			return 2, buildErr
 		}
-		verdict, err = callGemini(prompt, env("GEMINI_API_KEY", ""), cfg.Model)
-		if err != nil {
-			return 2, err
+		verdict, geminiErr = callGemini(prompt, env("GEMINI_API_KEY", ""), cfg.Model)
+		if geminiErr != nil {
+			verdict = modelVerdict{Status: "pass", Risk: "none", Summary: "Gemini was temporarily unavailable; deterministic critical guards were applied.", Violations: []violation{}}
 		}
 	} else if cfg.Engine != "deterministic" {
 		return 2, fmt.Errorf("unsupported engine %q", cfg.Engine)
 	}
 	verdict = addDeterministicGuards(verdict, diff, context, contract)
+	if geminiErr != nil && verdict.Status != "fail" {
+		return 2, geminiErr
+	}
 	if err := validateVerdict(verdict, contract); err != nil {
 		return 2, err
 	}
